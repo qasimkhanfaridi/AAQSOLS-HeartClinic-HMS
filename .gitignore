@@ -1,0 +1,11 @@
+node_modules/
+dist/
+bin/
+obj/
+run/
+.vs/
+.env
+.env.*
+*.user
+appsettings.Development.json
+appsettings.Local.json
