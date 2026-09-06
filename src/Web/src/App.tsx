@@ -15,6 +15,7 @@ import { ReceptionCashFlowPage } from './pages/ReceptionCashFlowPage';
 import { AverageOpdPage } from './pages/AverageOpdPage';
 import { RegionWisePage } from './pages/RegionWisePage';
 import { ImagingOrdersPage } from './pages/ImagingOrdersPage';
+import { ChallanVaultPage } from './pages/ChallanVaultPage';
 import { ComingSoonPage } from './pages/ComingSoonPage';
 import './index.css';
 
@@ -43,6 +44,7 @@ export default function App() {
           <Route path="coming-soon" element={<ComingSoonPage />} />
           <Route path="patients/add" element={<AddPatientPage />} />
           <Route path="patients/vault" element={<PatientVaultPage />} />
+          <Route path="challans/vault" element={<ChallanVaultPage />} />
           <Route path="consultation" element={<ConsultationPage />} />
           <Route path="medicines" element={<MedicineListPage />} />
         </Route>

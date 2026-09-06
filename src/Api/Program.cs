@@ -647,6 +647,46 @@ app.MapGet("/api/reports/average-opd", async (DateTime? from, DateTime? to, AppD
     return Results.Ok(new AverageOpdReport(start, end, daily, totalOpd, avgPerDay, peakDay?.OpdCount ?? 0, peakDay?.Date));
 }).RequireAuthorization();
 
+app.MapGet("/api/challans", async (string? search, DateTime? from, DateTime? to, AppDbContext db, ClaimsPrincipal user) =>
+{
+    var branchId = Guid.Parse(user.FindFirstValue("branchId")!);
+    var start = from ?? DateTime.UtcNow.Date.AddDays(-30);
+    var end = (to ?? DateTime.UtcNow.Date).AddDays(1);
+
+    var query = db.Challans
+        .Include(c => c.IssuedByUser)
+        .Include(c => c.CheckIn).ThenInclude(ci => ci.Patient)
+        .Include(c => c.CheckIn).ThenInclude(ci => ci.ServiceLines)
+        .Where(c => c.BranchId == branchId && c.IssuedAtUtc >= start && c.IssuedAtUtc < end);
+
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        var term = search.Trim();
+        query = query.Where(c =>
+            c.ChallanNumber.Contains(term) ||
+            c.CheckIn.Patient.FirstName.Contains(term) ||
+            c.CheckIn.Patient.MrNumber.Contains(term));
+    }
+
+    var items = await query
+        .OrderByDescending(c => c.IssuedAtUtc)
+        .Take(100)
+        .Select(c => new ChallanVaultDto(
+            c.Id,
+            c.ChallanNumber,
+            c.CheckIn.Patient.FirstName,
+            c.CheckIn.Patient.MrNumber,
+            string.Join(", ", c.CheckIn.ServiceLines.Select(l => l.ServiceName)),
+            c.SubTotal,
+            c.PatientPayable,
+            c.PanelPayable,
+            c.IssuedAtUtc,
+            c.IssuedByUser.DisplayName))
+        .ToListAsync();
+
+    return Results.Ok(items);
+}).RequireAuthorization();
+
 app.Run();
 
 record LoginRequest(string UserName, string Password);
@@ -688,3 +728,4 @@ record RegionWiseRow(string Region, string BranchName, int Registered, int Opd, 
 record RegionWiseReport(DateTime From, DateTime To, List<RegionWiseRow> Rows);
 record AverageOpdDailyRow(DateOnly Date, int OpdCount);
 record AverageOpdReport(DateTime From, DateTime To, List<AverageOpdDailyRow> DailyRows, int TotalOpd, double AverageOpdPerDay, int PeakDayCount, DateOnly? PeakDate);
+record ChallanVaultDto(Guid Id, string ChallanNumber, string PatientName, string MrNumber, string Services, decimal SubTotal, decimal PatientPayable, decimal PanelPayable, DateTime IssuedAt, string IssuedBy);

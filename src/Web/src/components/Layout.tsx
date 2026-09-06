@@ -23,7 +23,7 @@ const menu: MenuGroup[] = [
       { to: '/coming-soon?feature=Checked In Status', label: 'Checked In Status', roles: ['ADMIN', 'RECEPTION'], soon: true },
       { to: '/coming-soon?feature=Diagnostics Reports', label: 'Diagnostics/ Investigations Reports', roles: ['ADMIN', 'RECEPTION', 'DOCTOR'], soon: true },
       { to: '/coming-soon?feature=EMR Search', label: 'EMR Search', roles: ['ADMIN', 'DOCTOR'], soon: true },
-      { to: '/coming-soon?feature=Challan Vault', label: 'Challan Vault', roles: ['ADMIN', 'RECEPTION'], soon: true },
+      { to: '/challans/vault', label: 'Challan Vault', roles: ['ADMIN', 'RECEPTION'] },
       { to: '/coming-soon?feature=Update Doctor Checkin Patient Info', label: 'Update Doctor Checkin Patient Info', roles: ['ADMIN', 'RECEPTION'], soon: true },
     ],
   },

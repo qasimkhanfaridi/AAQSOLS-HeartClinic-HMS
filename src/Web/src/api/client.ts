@@ -226,3 +226,16 @@ export interface AverageOpdReport {
   peakDayCount: number;
   peakDate?: string;
 }
+
+export interface ChallanRecord {
+  id: string;
+  challanNumber: string;
+  patientName: string;
+  mrNumber: string;
+  services: string;
+  subTotal: number;
+  patientPayable: number;
+  panelPayable: number;
+  issuedAt: string;
+  issuedBy: string;
+}
