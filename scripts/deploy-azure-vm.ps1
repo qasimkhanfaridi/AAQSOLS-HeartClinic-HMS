@@ -3,7 +3,7 @@
 # ==============================================================================
 param(
     [string]$ResourceGroup = "rg-heartclinic",
-    [string]$Location = "eastus",
+    [string]$PreferredLocation = "eastus2",
     [string]$VmName = "vm-heartclinic",
     [string]$VmSize = "Standard_B2s",        # 2 vCPUs, 4 GB RAM (~$30/month)
     [string]$AdminUser = "azureuser"
@@ -34,8 +34,8 @@ if (-not $account) {
 Write-Host "[+] Logged in to Azure Subscription: $($account.name) ($($account.id))" -ForegroundColor Green
 
 # 3. Create Resource Group
-Write-Host "`n[2/5] Creating/verifying Resource Group '$ResourceGroup' in '$Location'..." -ForegroundColor Yellow
-az group create --name $ResourceGroup --location $Location --output none
+Write-Host "`n[2/5] Creating/verifying Resource Group '$ResourceGroup' in '$PreferredLocation'..." -ForegroundColor Yellow
+az group create --name $ResourceGroup --location $PreferredLocation --output none
 Write-Host "[+] Resource Group ready." -ForegroundColor Green
 
 # 4. Check cloud-init file
@@ -45,23 +45,48 @@ if (-not (Test-Path $cloudInitPath)) {
     exit 1
 }
 
-# 5. Create Virtual Machine with Cloud-Init
-Write-Host "`n[3/5] Deploying Ubuntu 24.04 LTS VM ($VmName) with zero-touch automation..." -ForegroundColor Yellow
+# 5. Create Virtual Machine with automated region fallback
+$regions = @($PreferredLocation, "eastus2", "centralus", "northeurope", "westeurope", "westus2", "southeastasia") | Select-Object -Unique
+$deployed = $false
+$deployedLoc = ""
+
+Write-Host "`n[3/5] Deploying Ubuntu 24.04 LTS VM ($VmName)..." -ForegroundColor Yellow
 Write-Host "      Size: $VmSize" -ForegroundColor Gray
-Write-Host "      This step takes approximately 1 to 2 minutes..." -ForegroundColor Gray
 
-az vm create `
-    --resource-group $ResourceGroup `
-    --name $VmName `
-    --image Ubuntu2404 `
-    --size $VmSize `
-    --admin-username $AdminUser `
-    --generate-ssh-keys `
-    --custom-data $cloudInitPath `
-    --public-ip-sku Standard `
-    --output none
+foreach ($loc in $regions) {
+    Write-Host "--> Attempting deployment in '$loc'..." -ForegroundColor Gray
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = az vm create `
+            --resource-group $ResourceGroup `
+            --name $VmName `
+            --location $loc `
+            --image Ubuntu2404 `
+            --size $VmSize `
+            --admin-username $AdminUser `
+            --generate-ssh-keys `
+            --custom-data $cloudInitPath `
+            --public-ip-sku Standard `
+            --output none 2>&1
+        $ErrorActionPreference = "Stop"
 
-Write-Host "[+] Virtual Machine created successfully." -ForegroundColor Green
+        if ($LASTEXITCODE -eq 0) {
+            $deployed = $true
+            $deployedLoc = $loc
+            Write-Host "[+] Virtual Machine created successfully in '$loc'!" -ForegroundColor Green
+            break
+        } else {
+            Write-Host "    Capacity restricted in '$loc'. Trying next Azure region..." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "    Capacity restricted in '$loc'. Trying next Azure region..." -ForegroundColor Yellow
+    }
+}
+
+if (-not $deployed) {
+    Write-Host "[-] Could not find available capacity for size '$VmSize' in tested regions." -ForegroundColor Red
+    exit 1
+}
 
 # 6. Open Web Firewall Ports (HTTP 80, HTTPS 443)
 Write-Host "`n[4/5] Configuring Network Security Group rules (Ports 80 & 443)..." -ForegroundColor Yellow
@@ -76,6 +101,7 @@ $publicIp = az vm show -d -g $ResourceGroup -n $VmName --query publicIps -o tsv
 Write-Host "`n========================================================" -ForegroundColor Green
 Write-Host " DEPLOYMENT TRIGGERED SUCCESSFULLY!" -ForegroundColor Green
 Write-Host "========================================================" -ForegroundColor Green
+Write-Host " Region:        $deployedLoc" -ForegroundColor White
 Write-Host " Public IP:     $publicIp" -ForegroundColor White
 Write-Host " Clinic URL:    http://$publicIp" -ForegroundColor Cyan
 Write-Host " Health Check:  http://$publicIp/health" -ForegroundColor Cyan
