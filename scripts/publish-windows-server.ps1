@@ -22,10 +22,10 @@ if (-not (Test-Path "node_modules")) {
 & npm.cmd run build
 Write-Host "[+] React build complete." -ForegroundColor Green
 
-# 2. Publish .NET 10 API
-Write-Host "`n[2/4] Publishing .NET 10 API..." -ForegroundColor Yellow
+# 2. Publish .NET 10 API (Self-Contained for Windows Server)
+Write-Host "`n[2/4] Publishing .NET 10 API (Self-Contained win-x64)..." -ForegroundColor Yellow
 Set-Location $rootDir
-dotnet publish "src\Api\HeartClinicHms.Api.csproj" -c Release -o $outputDir --nologo
+dotnet publish "src\Api\HeartClinicHms.Api.csproj" -c Release -r win-x64 --self-contained true -o $outputDir --nologo
 Write-Host "[+] .NET API publish complete." -ForegroundColor Green
 
 # 3. Copy React build into API wwwroot
@@ -35,7 +35,12 @@ if (Test-Path $wwwrootDir) {
 }
 New-Item -ItemType Directory -Path $wwwrootDir -Force | Out-Null
 Copy-Item -Path (Join-Path $webDir "dist\*") -Destination $wwwrootDir -Recurse -Force
-Write-Host "[+] wwwroot bundled." -ForegroundColor Green
+
+$logsDir = Join-Path $outputDir "logs"
+if (-not (Test-Path $logsDir)) {
+    New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+}
+Write-Host "[+] wwwroot and logs directory bundled." -ForegroundColor Green
 
 # 4. Create start.cmd launcher
 Write-Host "`n[4/4] Creating launcher script..." -ForegroundColor Yellow

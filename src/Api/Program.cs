@@ -25,7 +25,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {
     if (useSqlite)
     {
-        var sqliteConn = !string.IsNullOrWhiteSpace(connectionString) && connectionString.Contains("Data Source=")
+        var sqliteConn = !string.IsNullOrWhiteSpace(connectionString) && (connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase) || connectionString.Contains("Mode=Memory", StringComparison.OrdinalIgnoreCase))
             ? connectionString
             : "Data Source=HeartClinicDemo.db";
         options.UseSqlite(sqliteConn);

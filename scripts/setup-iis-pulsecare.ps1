@@ -10,7 +10,8 @@ param(
     [string]$SiteName = "pulsecare.aaqsols.com",
     [string]$HostHeader = "pulsecare.aaqsols.com",
     [int]$Port = 80,
-    [string]$PhysicalPath = "C:\inetpub\wwwroot\pulsecare.aaqsols.com"
+    [string]$PhysicalPath = "C:\inetpub\wwwroot\pulsecare.aaqsols.com",
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,24 +66,39 @@ $rootDir = Split-Path $PSScriptRoot -Parent
 $publishScript = Join-Path $PSScriptRoot "publish-windows-server.ps1"
 $publishSource = Join-Path $rootDir "publish\HeartClinicHms"
 
-if (-not (Test-Path $publishSource)) {
+if (-not $SkipBuild -or -not (Test-Path $publishSource)) {
     if (Test-Path $publishScript) {
         Write-Host "    Running build script..." -ForegroundColor Gray
         & powershell -ExecutionPolicy Bypass -File $publishScript
     } else {
-        Write-Host "[-] Error: Neither publish folder nor build script found." -ForegroundColor Red
+        Write-Host "[-] Error: Publish script not found." -ForegroundColor Red
         exit 1
     }
+} else {
+    Write-Host "    Using existing publish folder (SkipBuild specified)." -ForegroundColor Gray
 }
 
-# 5. Copy files to destination
+# 5. Stop existing processes and copy files
 Write-Host ""
 Write-Host ('[4/6] Deploying files to {0}...' -f $PhysicalPath) -ForegroundColor Yellow
+
+# Stop to release file locks
+Write-Host "    Stopping existing processes and pool..." -ForegroundColor Gray
+Get-Process -Name HeartClinicHms.Api -ErrorAction SilentlyContinue | Stop-Process -Force
+Stop-WebSite -Name $SiteName -ErrorAction SilentlyContinue
+Stop-WebAppPool -Name $SiteName -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+
 if (-not (Test-Path $PhysicalPath)) {
     New-Item -ItemType Directory -Path $PhysicalPath -Force | Out-Null
 }
 Copy-Item -Path (Join-Path $publishSource "*") -Destination $PhysicalPath -Recurse -Force
-Write-Host "[+] Files copied successfully." -ForegroundColor Green
+
+$logsDir = Join-Path $PhysicalPath "logs"
+if (-not (Test-Path $logsDir)) {
+    New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+}
+Write-Host "[+] Files and logs folder copied successfully." -ForegroundColor Green
 
 # 6. Set folder permissions for SQLite and IIS
 Write-Host ""
@@ -130,6 +146,17 @@ New-Website -Name $SiteName -Port $Port -HostHeader $HostHeader -PhysicalPath $P
 # Start
 Start-WebAppPool -Name $SiteName -ErrorAction SilentlyContinue
 Start-WebSite -Name $SiteName -ErrorAction SilentlyContinue
+
+Write-Host "    Waiting for site warmup..." -ForegroundColor Gray
+Start-Sleep -Seconds 3
+
+try {
+    $res = Invoke-WebRequest -Uri "http://127.0.0.1/health" -Headers @{ Host = $HostHeader } -UseBasicParsing -TimeoutSec 10
+    Write-Host ('[+] Health check verified: HTTP {0}' -f $res.StatusCode) -ForegroundColor Green
+} catch {
+    Write-Host ('[-] Note: Warmup check returned: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+    Write-Host ('    Check stdout logs in: {0}\logs' -f $PhysicalPath) -ForegroundColor Gray
+}
 
 Write-Host ''
 Write-Host '========================================================' -ForegroundColor Green
