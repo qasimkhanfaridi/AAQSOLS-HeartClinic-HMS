@@ -10,9 +10,30 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite")
+    || builder.Environment.IsEnvironment("Demo")
+    || (connectionString != null && (connectionString.Contains(".db", StringComparison.OrdinalIgnoreCase) || (connectionString.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase) && !connectionString.Contains("Server="))));
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    if (useSqlite)
+    {
+        var sqliteConn = !string.IsNullOrWhiteSpace(connectionString) && connectionString.Contains("Data Source=")
+            ? connectionString
+            : "Data Source=HeartClinicDemo.db";
+        options.UseSqlite(sqliteConn);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
     options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 });
 
@@ -21,13 +42,25 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        var configuredOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>();
+        if (builder.Environment.IsProduction() && configuredOrigins is { Length: > 0 } && !configuredOrigins.Contains("*"))
+        {
+            policy.WithOrigins(configuredOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+        else
+        {
+            policy.SetIsOriginAllowed(_ => true)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
     });
 });
 
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "AAQSOLS-PulseCore-HeartClinic-Dev-Key-Change-In-Production-2026";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -37,8 +70,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "HeartClinicHms",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "HeartClinicHms.Web",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
@@ -50,15 +83,29 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    try
+    if (useSqlite)
     {
-        await db.Database.MigrateAsync();
+        await db.Database.EnsureCreatedAsync();
     }
-    catch (Exception ex)
+    else
     {
-        app.Logger.LogWarning(ex, "Migration failed — recreating database.");
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.MigrateAsync();
+        if (app.Environment.IsDevelopment())
+        {
+            try
+            {
+                await db.Database.MigrateAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Migration failed — recreating database.");
+                await db.Database.EnsureDeletedAsync();
+                await db.Database.MigrateAsync();
+            }
+        }
+        else
+        {
+            await db.Database.MigrateAsync();
+        }
     }
     await DatabaseSeeder.SeedAsync(db);
 }
@@ -70,7 +117,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", product = "PulseCore Heart Clinic HMS" }));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", product = "PulseCore Heart Clinic HMS", database = useSqlite ? "SQLite (Demo)" : "SQL Server" }));
 
 app.MapPost("/api/auth/login", async (LoginRequest req, AppDbContext db, IConfiguration config) =>
 {

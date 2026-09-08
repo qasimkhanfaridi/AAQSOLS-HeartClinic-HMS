@@ -9,3 +9,5 @@ run/
 *.user
 appsettings.Development.json
 appsettings.Local.json
+*.db
+*.db-*
