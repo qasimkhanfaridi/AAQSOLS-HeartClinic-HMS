@@ -59,8 +59,9 @@ for r in "${CANDIDATE_REGIONS[@]}"; do
     fi
 done
 
+set +e
 for loc in "${TRY_REGIONS[@]}"; do
-    echo "--> Trying region: '$loc'..."
+    echo "--> Trying region: '$loc' with size '$VM_SIZE'..."
     if az vm create \
         --resource-group "$RESOURCE_GROUP" \
         --name "$VM_NAME" \
@@ -77,9 +78,10 @@ for loc in "${TRY_REGIONS[@]}"; do
         echo "[+] Virtual Machine successfully created in '$loc'!"
         break
     else
-        echo "    Capacity full in '$loc'. Checking next available Azure region..."
+        echo "    Capacity or SKU unavailable in '$loc'. Trying next Azure region..."
     fi
 done
+set -e
 
 if [ "$DEPLOYED" = false ]; then
     echo -e "\n[-] Could not deploy $VM_SIZE across tested regions. Last Azure error:"
