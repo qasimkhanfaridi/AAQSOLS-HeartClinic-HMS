@@ -116,6 +116,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", product = "PulseCore Heart Clinic HMS", database = useSqlite ? "SQLite (Demo)" : "SQL Server" }));
 
@@ -733,6 +735,8 @@ app.MapGet("/api/challans", async (string? search, DateTime? from, DateTime? to,
 
     return Results.Ok(items);
 }).RequireAuthorization();
+
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
