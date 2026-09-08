@@ -29,10 +29,15 @@ if ! az account show &> /dev/null; then
 fi
 echo "[+] Azure account verified."
 
-# 3. Create Resource Group
-echo -e "\n[2/5] Creating Resource Group '$RESOURCE_GROUP' in '$PREFERRED_LOCATION'..."
-az group create --name "$RESOURCE_GROUP" --location "$PREFERRED_LOCATION" --output none
-echo "[+] Resource Group ready."
+# 3. Create or verify Resource Group
+echo -e "\n[2/5] Checking Resource Group '$RESOURCE_GROUP'..."
+if az group exists --name "$RESOURCE_GROUP" 2>/dev/null | grep -qi "true"; then
+    echo "[+] Resource Group '$RESOURCE_GROUP' already exists."
+else
+    echo "    Creating Resource Group '$RESOURCE_GROUP' in '$PREFERRED_LOCATION'..."
+    az group create --name "$RESOURCE_GROUP" --location "$PREFERRED_LOCATION" --output none
+    echo "[+] Resource Group ready."
+fi
 
 # 4. Locate cloud-init
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -33,10 +33,16 @@ if (-not $account) {
 }
 Write-Host "[+] Logged in to Azure Subscription: $($account.name) ($($account.id))" -ForegroundColor Green
 
-# 3. Create Resource Group
-Write-Host "`n[2/5] Creating/verifying Resource Group '$ResourceGroup' in '$PreferredLocation'..." -ForegroundColor Yellow
-az group create --name $ResourceGroup --location $PreferredLocation --output none
-Write-Host "[+] Resource Group ready." -ForegroundColor Green
+# 3. Create or verify Resource Group
+Write-Host "`n[2/5] Checking Resource Group '$ResourceGroup'..." -ForegroundColor Yellow
+$exists = az group exists --name $ResourceGroup 2>$null
+if ($exists -match "true") {
+    Write-Host "[+] Resource Group '$ResourceGroup' already exists." -ForegroundColor Green
+} else {
+    Write-Host "    Creating Resource Group '$ResourceGroup' in '$PreferredLocation'..." -ForegroundColor Yellow
+    az group create --name $ResourceGroup --location $PreferredLocation --output none
+    Write-Host "[+] Resource Group ready." -ForegroundColor Green
+}
 
 # 4. Check cloud-init file
 $cloudInitPath = Join-Path $PSScriptRoot "..\cloud-init.yaml"
