@@ -85,8 +85,8 @@ Write-Host ('[4/6] Deploying files to {0}...' -f $PhysicalPath) -ForegroundColor
 # Stop to release file locks
 Write-Host "    Stopping existing processes and pool..." -ForegroundColor Gray
 Get-Process -Name HeartClinicHms.Api -ErrorAction SilentlyContinue | Stop-Process -Force
-Stop-WebSite -Name $SiteName -ErrorAction SilentlyContinue
-Stop-WebAppPool -Name $SiteName -ErrorAction SilentlyContinue
+try { Stop-WebSite -Name $SiteName -ErrorAction Stop } catch { <# already stopped #> }
+try { Stop-WebAppPool -Name $SiteName -ErrorAction Stop } catch { <# already stopped #> }
 Start-Sleep -Seconds 1
 
 if (-not (Test-Path $PhysicalPath)) {
@@ -124,7 +124,7 @@ Write-Host "[6/6] Creating IIS Website and Application Pool..." -ForegroundColor
 $appPoolPath = Join-Path 'IIS:\AppPools' $SiteName
 if (Test-Path $appPoolPath) {
     Write-Host ('    Stopping existing App Pool {0}...' -f $SiteName) -ForegroundColor Gray
-    Stop-WebAppPool -Name $SiteName -ErrorAction SilentlyContinue
+    try { Stop-WebAppPool -Name $SiteName -ErrorAction Stop } catch { <# already stopped #> }
 } else {
     Write-Host ('    Creating App Pool {0}...' -f $SiteName) -ForegroundColor Gray
     New-Item -Path $appPoolPath -Force | Out-Null
@@ -136,16 +136,16 @@ Set-ItemProperty -Path $appPoolPath -Name 'managedPipelineMode' -Value 0
 $sitePath = Join-Path 'IIS:\Sites' $SiteName
 if (Test-Path $sitePath) {
     Write-Host ('    Updating existing Website {0}...' -f $SiteName) -ForegroundColor Gray
-    Stop-WebSite -Name $SiteName -ErrorAction SilentlyContinue
-    Remove-Website -Name $SiteName
+    try { Stop-WebSite -Name $SiteName -ErrorAction Stop } catch { <# already stopped #> }
+    try { Remove-Website -Name $SiteName -ErrorAction Stop } catch { <# ignore #> }
 }
 
 Write-Host ('    Binding: http on *:{0} with Host Header {1}...' -f $Port, $HostHeader) -ForegroundColor Gray
 New-Website -Name $SiteName -Port $Port -HostHeader $HostHeader -PhysicalPath $PhysicalPath -ApplicationPool $SiteName | Out-Null
 
 # Start
-Start-WebAppPool -Name $SiteName -ErrorAction SilentlyContinue
-Start-WebSite -Name $SiteName -ErrorAction SilentlyContinue
+try { Start-WebAppPool -Name $SiteName -ErrorAction Stop } catch { <# already started #> }
+try { Start-WebSite -Name $SiteName -ErrorAction Stop } catch { <# already started #> }
 
 Write-Host "    Waiting for site warmup..." -ForegroundColor Gray
 Start-Sleep -Seconds 3
